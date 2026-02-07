@@ -1,45 +1,116 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Loading...</title>
+    <title>報名成功</title>
     <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     <style>
-        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background-color: #f5f5f5; }
-        .loader { border: 5px solid #f3f3f3; border-top: 5px solid #3498db; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        body { font-family: "Microsoft JhengHei", "Heiti TC", sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background-color: #f5f5f5; padding: 20px; box-sizing: border-box; }
+        .container { background: white; padding: 40px 30px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); text-align: center; max-width: 400px; width: 100%; }
+        h1 { color: #06c755; margin: 0 0 15px 0; font-size: 24px; }
+        p { color: #555; line-height: 1.6; margin: 0 0 25px 0; font-size: 15px; }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #06c755; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto 20px auto; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .btn { display: inline-block; width: 100%; padding: 15px 0; border-radius: 10px; text-decoration: none; border: none; font-size: 16px; cursor: pointer; font-weight: bold; transition: background 0.3s; margin-bottom: 10px; box-sizing: border-box; }
+        .btn-primary { background-color: #06c755; color: white; box-shadow: 0 4px 6px rgba(6, 199, 85, 0.2); }
+        .btn-primary:hover { background-color: #05a546; }
+        .btn-secondary { background-color: #e0e0e0; color: #555; }
+        .hidden { display: none; }
     </style>
 </head>
 <body>
-    <div class="loader"></div>
+
+    <div id="loading" class="container"><div class="loader"></div><p>正在確認您的報名資料...</p></div>
+    <div id="success" class="container hidden">
+        <h1>🎉 報名成功！</h1>
+        <p>親愛的 <b id="user-name"></b>，<br>資料已確認，歡迎加入直播！</p>
+        <a id="watch-btn" href="#" class="btn btn-primary">👉 點擊進入講座直播間</a>
+        <p style="font-size:12px; color:#999; margin-top:15px;">( 專屬連結已發送至您的 LINE )</p>
+        <button class="btn btn-secondary" onclick="liff.closeWindow()">關閉視窗</button>
+    </div>
+    <div id="error" class="container hidden"><h1 style="color:#ff4b4b;">❌ 發生錯誤</h1><p>無法連線，請確認網路後重新點擊連結。</p><button class="btn btn-secondary" onclick="window.location.reload()">重新整理</button></div>
 
     <script>
-        const MyLiffId = '2009018332-wywdUELq';
-        const WebinarUrl = 'https://webinar.archiestudio.co/webinar/registration/696f0867a8416e192c4c1c7e';
+        // 👇👇👇 設定區 (確認ID無誤) 👇👇👇
+        const MyLiffId = '找archie!!!'; 
+        const MakeWebhookUrl = 'https://hook.us2.make.com/n8ep5dajfie8xtfdrd8x7q9qbgd3jaz2'; 
+        const WebinarID = '696f0867a8416e192c4c1c7e';
+        // 👆👆👆 設定結束 👆👆👆
 
         async function main() {
             try {
                 await liff.init({ liffId: MyLiffId });
-                
+
+                const currentUrl = new URL(window.location.href);
+                const searchParams = currentUrl.searchParams;
+
+                // 1. 登入檢查與轉址
                 if (!liff.isLoggedIn()) {
-                    liff.login();
+                    liff.login({ redirectUri: window.location.href });
                     return;
                 }
 
+                // --- 登入後執行 ---
                 const profile = await liff.getProfile();
-                const userId = profile.userId;
-                const displayName = profile.displayName;
-
-                const redirectUrl = `${WebinarUrl}?line_user_id=${userId}&nickname=${encodeURIComponent(displayName)}`;
                 
-                window.location.replace(redirectUrl);
+                // 2. 🌟 關鍵修改：嚴格按照指定順序排列 🌟
+                // 順序：t -> r -> first_name -> email -> phone_number
+                const allowedKeys = ['t', 'r', 'first_name', 'email', 'phone_number'];
+                
+                const usefulParams = new URLSearchParams();
+
+                // 依照上面的順序，一個一個把參數抓進來 (如果存在的話)
+                for (const key of allowedKeys) {
+                    if (searchParams.has(key)) {
+                        usefulParams.append(key, searchParams.get(key));
+                    }
+                }
+                
+                // 3. 產生最終字串 (例如: t=...&r=...&first_name=...)
+                const finalQueryString = usefulParams.toString();
+
+                // 顯示名字
+                const userFirstName = usefulParams.get('first_name');
+                document.getElementById('user-name').textContent = userFirstName || profile.displayName;
+
+                // 4. 傳送給 Make
+                const response = await fetch(MakeWebhookUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        line_id: profile.userId,
+                        nickname: profile.displayName,
+                        picture: profile.pictureUrl,
+                        // 👇 這串現在會是完美的順序
+                        query_string: finalQueryString 
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    if (data.url) {
+                        document.getElementById('watch-btn').href = data.url;
+                    } else {
+                        // 備案組裝
+                        if (finalQueryString) {
+                            document.getElementById('watch-btn').href = `https://webinar.archiestudio.co/webinar/watch/${WebinarID}?${finalQueryString}`;
+                        } else {
+                            document.getElementById('watch-btn').href = `https://webinar.archiestudio.co/webinar/login/${WebinarID}`;
+                        }
+                    }
+
+                    document.getElementById('loading').classList.add('hidden');
+                    document.getElementById('success').classList.remove('hidden');
+                } else { throw new Error('Make Response Error'); }
 
             } catch (err) {
-                window.location.replace(WebinarUrl);
+                console.error(err);
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('error').classList.remove('hidden');
             }
         }
-
         main();
     </script>
 </body>
